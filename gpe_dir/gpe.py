@@ -36,7 +36,7 @@ from sklearn.model_selection import train_test_split
 from gpytGPE.gpe import GPEmul
 from gpytGPE.utils.metrics import IndependentStandardError as ISE
 import torchmetrics
-
+from pathlib import Path
 
 
 
@@ -167,8 +167,6 @@ def get_training_data(config):
         "names": [param_spec.id for param_spec in param_specs],
         "bounds": [list(param_spec.bounds) for param_spec in param_specs],
     }
-    
-
 
     samples = sobol_sample.sample(problem, config.num_samples, calc_second_order=config.calc_second_order)
 
@@ -179,10 +177,11 @@ def get_training_data(config):
     time_elapsed = time.time() - time_initial
     mins, secs = np.divmod(time_elapsed, 60)
 
+    print(f"Producing training data ")
+
     observable_names = [observable.name for observable in observables]
 
-    raw_path =  safe_save(os.path.join(config.raw_dir, f"raw_gpe_training_data_{time.strftime("%d %m %Y_%H %M")}"),{"inputs":samples, "raw_results":raw_results,"outputs": outputs, "observable_names": observable_names, "param_names": problem["names"]})
-
+    safe_save(os.path.join(config.raw_dir, f"raw_gpe_training_data_{time.strftime("%d %m %Y_%H %M")}"),{"inputs":samples, "raw_results":raw_results,"outputs": outputs, "observable_names": observable_names, "param_names": problem["names"]})
 
 
     failure_rate = (len(failures) / len(samples))
@@ -215,15 +214,30 @@ def gaussian_emulator(training_data):
 
     x_train, x_val, y_train, y_val = train_test_split(x_, y_, test_size=0.2, random_state=42)
 
+
     num_samples = len(x)
     power = np.log2(num_samples)
     timestamp = time.strftime("%d%m%Y_%H %M")
-    savepath = f"./gpe_models"
+
+    data_path = Path("./gpe_train_data")
+    data_path.mkdir(exist_ok=True)
+
+    x_path = str(data_path / f"x_data_{timestamp}")
+    y_path = str(data_path / f"y_data_{timestamp}")
+    
+    safe_save(x_path, x_train)
+    safe_save(y_path, y_train)
+
+    savepath = Path("./gpe_models")
+    savepath.mkdir(exist_ok=True)
+
 
     emulator = GPEmul(x_train, y_train)
     emulator.train(x_val, y_val, savepath=savepath, save_losses=True, watch_metric="MSE") # could test out other regression metrics
 
-    emulator.save(filename=f"gpe_{timestamp}.pth")
+    emulator.save(filename=str(savepath / f"gpe_{timestamp}.pth"))
+
+
 
     mean_list = []
     std_list = []
@@ -304,16 +318,36 @@ def gaussian_emulator(training_data):
         savepath + "inference_on_testset.pdf", bbox_inches="tight", dpi=1000
     )
 
+    return savepath, x_path, y_path
+
 # Function that uses the trained gpe to generate simulation input vectors
-def generate_input_vectors(gpe_save_path):
-    gpe_vectors = []
+def generate_predictions(config, training_data, gpe_savepath, x_path, y_path):
+    if not os.path.exists(gpe_savepath):
+        raise Exception(f"Path to trained GPE cannot be found: {gpe_savepath}")
 
-    if not os.path.exists(gpe_save_path):
-        raise Exception(f"Path to trained GPE cannot be found: {gpe_save_path}")
+    x_train = np.load(x_path)
+    y_train = np.load(y_path)
+
+    gaussian_emulator = GPEmul.load(x_train, y_train, gpe_savepath)
 
 
-    return gpe_vectors
+    problem = training_data["problem"]
     
+    samples = sobol_sample.sample(problem, 1024, calc_second_order=config.calc_second_order)
+
+
+
+    means, sigmas = gaussian_emulator.predict(samples) # means and standard deviations of gpe-predicted probability distribution over possible values
+
+    gpe_predictions = {
+        "inputs": samples,
+        "predicted_mean": means,
+        "predicted_std": sigmas,
+    }
+
+    return gpe_predictions
+
+
     # optimize gpe using training loss and use validation loss to evaluate generalization and provide insight on how the model performs on new data and when to stop training
     # for i in range(512):
     # # train model
