@@ -1,5 +1,3 @@
-
-
 import numpy as np
 from dataclasses import dataclass, field
 from typing import Callable, Optional
@@ -18,7 +16,8 @@ class ObservableHandler:
             return float(self.func(results))
 
         y, _ = get_series(results, self.variable)
-        if y.size() == 0:
+        
+        if y.size == 0:
             raise KeyError(f"Variable {self.variable} not found in results")
         
         return get_metric(y,self.metric)
@@ -45,7 +44,7 @@ def get_volumes(volume_observable, volume_baseline=0.0):
     def volume(results):
         vol, _ = get_series(results, volume_observable)
 
-        if vol.size() == 0:
+        if vol.size == 0:
             raise KeyError(f"Volume variable {volume_observable} not found in results dataframe")
 
         return np.asanyarray(vol) + volume_baseline

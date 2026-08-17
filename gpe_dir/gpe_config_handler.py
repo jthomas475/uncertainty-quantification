@@ -8,15 +8,7 @@ from dataclasses import dataclass, field
 from .gpe_param_handler import discover_params, ParamIdentifier, BLOCK_REGISTRY, scan_blocks
 from .gpe_observables import get_observables, get_volumes
 
-
-# Need function to load (read) json file
-
-# Need function to isolate all tuneable parameters from json file
-
-# Can create a class that stores input information related to the gpe setup
-
 # should establish yaml handling? svzerotuner implementation uses it
-
 
 @dataclass
 class ConfigHandler:
@@ -25,6 +17,10 @@ class ConfigHandler:
     param_bounds: dict = field(default_factory=dict)
     num_samples: int=32
     n_jobs: int=1
+    max_gpe_wave_reps: int=20
+    max_waves: int=5
+    samples_per_wave: int=512
+    gpe_cutoff = 3.0
 
     observables: list = field(default_factory=list)
     observable_fields: tuple = ("pressure", "flow")
@@ -34,6 +30,7 @@ class ConfigHandler:
     quiet_solver: bool = True
     output_dir: str = "../GPE_Results"
     raw_dir: str = "../GPE_RawOutputs"
+    wave_dir: str = "../GPE_WaveResults"
 
 
     @classmethod
