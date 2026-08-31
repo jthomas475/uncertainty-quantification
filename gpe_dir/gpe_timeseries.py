@@ -14,7 +14,7 @@ def list_variables(results):
 
 # Does this work for all model schema in simvascular/zerodsolver? Need to check
 def get_series(results, variable):
-    cols = results.column
+    cols = results.columns
     vector = results[results["name"] == variable]
     return vector["y"].to_numpy(), vector["time"].to_numpy()
 

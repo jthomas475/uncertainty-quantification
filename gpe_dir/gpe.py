@@ -10,7 +10,7 @@ import os
 import time
 import pysvzerod as zerod
 
-from SALib.sample import sobol as sobol_sample
+from SALib.sample import saltelli as sobol_sample
 
 from GSA_library.plotting import * # imports all public names, such as functions, variables, classes, from plotting
 from GSA_library.gsa_plotting import * 
@@ -75,7 +75,7 @@ def get_training_data(config):
 
     observable_names = [observable.name for observable in observables]
 
-    safe_save(os.path.join(config.raw_dir, f"raw_gpe_training_data_{time.strftime("%d %m %Y_%H %M")}"),{"inputs":samples, "raw_results":raw_results,"outputs": outputs, "observable_names": observable_names, "param_names": problem["names"]})
+    safe_save(os.path.join(config.raw_dir, f"raw_gpe_training_data_{time.strftime('%d_%m_%H_%Y-%M')}"),{"inputs":samples, "raw_results":raw_results,"outputs": outputs, "observable_names": observable_names, "param_names": problem["names"]})
 
 
     failure_rate = (len(failures) / len(samples))
@@ -85,6 +85,7 @@ def get_training_data(config):
         print("WARNING: Failure rate > 0.05. Sensitivity indices may be unreliable.")
 
     outputs_clean = replace_median(outputs)
+    print("Training data generated!")
 
     training_data = {
         "problem": problem,
@@ -161,15 +162,34 @@ def gaussian_emulator(training_data):
     inf_bound, sup_bound = [], []
 
     for j, obs_name in enumerate(observable_names):
+        if not np.isfinite(y_train[:,j]).any(): # THIS SHOULD FIX THE INFINITE RUNTIME LOOP ISSUE ONCE THE NaN COLUMNS ARE REACHED
+            print(f"Skipping {obs_name}, since contains non finite values")
+            continue
+
         emulator = GPEmul(x_train, y_train[:,j])
-        emulator.train(x_val, y_val[:,j], savepath= savepath/obs_name, save_losses=True, watch_metric="MSE") # could test out other regression metrics and kernels
-        emulator.save(filename=str(savepath / f"gpe_{obs_name}_{timestamp}.pth"))
+        emulator_savepath = savepath/obs_name
+        emulator_savepath.mkdir(parents=True, exist_ok=True)
+
+        emulator.train(x_val, y_val[:,j], savepath= str(emulator_savepath) + os.sep, save_losses=True, watch_metric=torchmetrics.MeanSquaredError()) # could test out other regression metrics and kernels
+        emulator.save(filename=f"gpe_{obs_name}_{timestamp}.pth")
         emulators[obs_name] = emulator
 
         y_pred_mean, y_pred_std = emulator.predict(x_test)
-        
 
-        mse = torchmetrics.MeanSquaredError(emulator.tensorize(y_pred_mean), emulator.tensorize(y_test[:,j]))
+        print(f"\n{obs_name}")
+        print(f"\n Prediction mean: {y_pred_mean}")
+        print(f"\n Prediction standard deviation: {y_pred_std}")
+
+        
+        mse_obj = torchmetrics.MeanSquaredError()
+        mse = mse_obj(emulator.tensorize(y_pred_mean), emulator.tensorize(y_test[:,j])).item()
+
+
+        # Debugging MSE and ISE 
+        mse_man = np.mean((y_test[:, j] - y_pred_mean) ** 2)
+
+        print(f"Manual MSE: {mse_man:.10f}")
+
 
         ise = ISE(
             emulator.tensorize(y_test[:,j]),
@@ -252,14 +272,15 @@ def append_training_data(training_data, new_inputs, new_outputs):
     training_data["inputs"] = np.vstack([training_data["inputs"],new_inputs])
 
     training_data["outputs"] = np.vstack([training_data["outputs"],new_outputs])
+    training_data["outputs"] = replace_median(training_data["outputs"])
 
     return training_data
 
 def history_match_wave(config):
     training_data = get_training_data(config)
-    max_waves = config.max_wave
+    max_waves = config.max_waves
     samples_per_wave = config.samples_per_wave
-    cutoff = config.cutoff
+    cutoff = config.gpe_cutoff
 
 
     for wave in range(max_waves):
@@ -277,8 +298,6 @@ def history_match_wave(config):
         _, new_outputs, _, _ = evaluate_model_parallel(data=training_data["data"], sample_params=nimp_samples, param_specs=training_data["specs"], observables=training_data["obs"], n_jobs=config.n_jobs)
 
         print(f"Accepted {len(nimp_samples)} of {samples_per_wave} samples ({100 * len(nimp_samples) / samples_per_wave}%)")
-
-        new_outputs = replace_median(new_outputs)
 
         training_data = append_training_data(training_data, nimp_samples, new_outputs)
 

@@ -34,8 +34,8 @@ def cmd_run(args):
         config = gpe_config_handler.ConfigHandler.load(args.config)
     else:
         config = gpe_config_handler.ConfigHandler(input_file=args.input_file)
-    if args.default_bounds:
-        config.default_bounds = args.default_bounds
+    if args.bounds:
+        config.bounds = args.bounds
     if args.param_bounds:
         for name, lower_bound, upper_bound in args.param_bounds:
             config.param_bounds[name] = (float(lower_bound), float(upper_bound))
@@ -61,21 +61,24 @@ def main():
 
     cmd_parser = parser.add_subparsers(dest="cmd", required=True)
 
-    inspect_parser = cmd_parser.add_parser(dest="inspect", help="Load input file and report (print) tunable parameters and output variables")
+    inspect_parser = cmd_parser.add_parser(name="inspect", help="Load input file and report (print) tunable parameters and output variables")
     inspect_parser.add_argument("input_file", help="Path to input model json file")
     inspect_parser.set_defaults(func=cmd_inspect)
 
 
-    run_parser = cmd_parser.add_parser(dest="run", help="Run history matching enhanced gpe")
+    run_parser = cmd_parser.add_parser(name="run", help="Run history matching enhanced gpe")
     run_parser.add_argument("input_file", help="Path to input model json file")
-    run_parser.add_argument("--param_bounds", help="")
-    run_parser.add_argument("--num_samples")
-    run_parser.add_argument("--n_jobs")
-    run_parser.add_argument("--max_gpe_wave_reps")
-    run_parser.add_argument("--max_waves")
-    run_parser.add_argument("--samples_per_wave")
-    run_parser.add_argument("--gpe_cutoff")
-    run_parser.add_argument("--calc_second_order")
+    run_parser.add_argument("--config", help="Path to saved GPE config")
+    run_parser.add_argument("--bounds", help="Universally applied parameter bounds (not parameter specific)")
+    run_parser.add_argument("--param_bounds", help="Parameter specific bounds")
+    run_parser.add_argument("--num_samples", help="Number of samples per parameters. Must be a power of 2", type=int)
+    run_parser.add_argument("--n_jobs", help="Number of desired cores to run simulation", type=int)
+    run_parser.add_argument("--max_gpe_wave_reps", help="Max number of simulated gpe waves", type=int)
+    run_parser.add_argument("--max_waves", help="Max number of hm-gpe iterations", type=int)
+    run_parser.add_argument("--samples_per_wave", help="Number of samples produced per gpe simulation", type=int)
+    run_parser.add_argument("--gpe_cutoff", help="Cutoff that determines implausible/non-implausible regions", type=float)
+    run_parser.add_argument("--calc_second_order", help="Boolean regarding whether second order sobol indices will be calculated")
+    run_parser.set_defaults(func=cmd_run)
 
     args = parser.parse_args()
     args.func(args)

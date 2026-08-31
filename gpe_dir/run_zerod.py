@@ -3,7 +3,7 @@ import pysvzerod as zerod
 import time
 
 from joblib import Parallel, delayed
-from SALib.sample import sobol as sobol_sample
+from SALib.sample import saltelli as sobol_sample
 
 from .gpe_param_handler import apply_scaler
 from .misc_helpers import safe_save, quiet_func
@@ -14,10 +14,11 @@ def replace_median(output):
 
     for j in range(Y.shape[1]):
         col = Y[:,j]
-        mask = np.isnan(col)
+        finite = np.isfinite(col)
+        mask = ~finite
 
-        if mask.any() and not mask.all():
-            col[mask] = np.nanmedian(col)
+        if mask.any() and finite.any():
+            col[mask] = np.nanmedian(col[finite])
 
     return Y
 
@@ -54,7 +55,7 @@ def evaluate_model_parallel(data, sample_params, param_specs, observables, n_job
 
     timeInitial = time.time()
 
-    results = Parallel(n_jobs=n_jobs, return_as="generator")(
+    results = Parallel(n_jobs=n_jobs)(
         delayed(evaluate_single)(data, sample_params[idx], param_specs, observables) for idx in range(num_samples)
     )
 

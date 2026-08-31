@@ -41,7 +41,7 @@ class ParamIdentifier:
         return f"{self.container}-{self.block}:{self.param}"
 
     def value(self,x):
-        return {self.baseline}*x if self.mode == "scale" else x
+        return self.baseline*x if self.mode == "scale" else x
 
 def is_tuneable_list(mylist):
     return isinstance(mylist, list) and all(is_scalar(i) for i in mylist)
@@ -65,7 +65,7 @@ def scan_blocks(data, container):
 
 def discover_params(data, bounds=(0.6,1.4), containers=None):
     containers = containers or list(BLOCK_REGISTRY)
-    param_sepcs = []
+    param_specs = []
 
     for container in containers:
         for name, values, _ in scan_blocks(data, container):
@@ -75,9 +75,9 @@ def discover_params(data, bounds=(0.6,1.4), containers=None):
                     continue
 
                 if is_scalar(val):
-                    param_sepcs.append(ParamIdentifier(container, name, key, float(val),tuple(bounds)))
+                    param_specs.append(ParamIdentifier(container, name, key, float(val),tuple(bounds)))
 
-    return param_sepcs
+    return param_specs
 
 
 def apply_scaler(data, param_specs, row):
@@ -86,7 +86,7 @@ def apply_scaler(data, param_specs, row):
     for param_spec, scaler in zip(param_specs, row):
         for name, values, _ in scan_blocks(perturbed, param_spec.container):
             if name == param_spec.block and param_spec.param in values:
-                values[param_spec.param] == param_spec.value_for(scaler)
+                values[param_spec.param] = param_spec.value(scaler)
 
     return perturbed
 
